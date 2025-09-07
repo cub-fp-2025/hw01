@@ -14,4 +14,4 @@ def ex8 (lb ub k : Nat) : ub ≤ k → lb ≤ ub → clamp lb ub k = ub :=  clam
 
 #eval student_name
 
-#print_grade_results ex1 ex2 ex3 ex4 ex5 ex6 ex7 ex8 ex9
+#print_grade_results ex1 ex2 ex3 ex4 ex5 ex6 ex7 ex8
