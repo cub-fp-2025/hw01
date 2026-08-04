@@ -1,23 +1,83 @@
 
+# Warning: messing with this file will give you an automatic 0 on your assignment.
 name: Lean Action CI
 
 on:
   push:
-  pull_request:
-  workflow_dispatch:
+    branches:
+      - main
+
+permissions:
+  actions: write
+  contents: read
 
 jobs:
   build:
+    if: |
+      github.actor != 'github-classroom[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: "run-limiter"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        id: check
+        run: |
+          if [ 1 -lt ${{ github.run_attempt }} ]; then
+            echo "Re-running the action does not work to re-submit your homework.  Push a new commit instead.  Aborting run."
+            gh run cancel ${{ github.run_id }}
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          MIN_HOURS=6
+          runs=$(gh run list --limit=100 --json databaseId,createdAt)
+          threshold_timestamp=$(date -d "$MIN_HOURS hours ago" +%s)
+          recent_runs=$(echo $runs | \
+            jq --argjson threshold $threshold_timestamp --argjson current_run ${{ github.run_id }} \
+            '[.[] | .createdAtTimestamp = (.createdAt | fromdateiso8601) | select(.createdAtTimestamp > $threshold and .databaseId != $current_run) | .databaseId]')
+          
+          last_run_timestamp=$(date -d "$last_run" +%s)
+          if [ "$recent_runs" = "[]" ]; then
+            echo "No runs found, running."
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ "$(echo "$recent_runs" | jq 'length')" -ge 2 ]; then
+            echo "Grader spam detected.  Timeout duration reset."
+            echo "Please wait $MIN_HOURS hours before submitting again."
+            exit 1
+          fi
+
+          # Check if any recent run had build job complete (not skipped)
+          has_recent_build=$(echo "$recent_runs" | jq -r '.[]' | while read run_id; do
+            gh run view "$run_id" --json jobs --jq '.jobs[] | select(.name == "build" and .conclusion != "skipped" and .conclusion != "cancelled" and .conclusion != null)'
+          done)
+
+          if [ -n "$has_recent_build" ]; then
+            echo "Last run too recent:" $has_recent_build
+            gh run cancel ${{ github.run_id }}
+            echo "should-run=false" >> $GITHUB_OUTPUT
+          else
+            echo "Last run at least $MIN_HOURS ago, running."
+            echo "should-run=true" >> $GITHUB_OUTPUT
+          fi
+      - name: "report-issue"
+        if: steps.check.outputs.should-run == 'false'
+        run:
+          echo "Submission failed, read the output of the previous step to find out why."
+          echo "Most likely, you are trying to submit too frequently."
       - uses: leanprover/lean-action@v1
+        if: steps.check.outputs.should-run == 'true'
       - name: "test-output"
+        if: steps.check.outputs.should-run == 'true'
         run: lake build > ./lake_output
 
       - name: ex01
         id: ex01
         uses: classroom-resources/autograding-command-grader@v1
+        if: steps.check.outputs.should-run == 'true'
         with:
           test-name: ex01
           setup-command: ''
@@ -28,6 +88,7 @@ jobs:
       - name: ex02
         id: ex02
         uses: classroom-resources/autograding-command-grader@v1
+        if: steps.check.outputs.should-run == 'true'
         with:
           test-name: ex02
           setup-command: ''
@@ -38,6 +99,7 @@ jobs:
       - name: ex03
         id: ex03
         uses: classroom-resources/autograding-command-grader@v1
+        if: steps.check.outputs.should-run == 'true'
         with:
           test-name: ex03
           setup-command: ''
@@ -48,6 +110,7 @@ jobs:
       - name: ex04
         id: ex04
         uses: classroom-resources/autograding-command-grader@v1
+        if: steps.check.outputs.should-run == 'true'
         with:
           test-name: ex04
           setup-command: ''
@@ -58,6 +121,7 @@ jobs:
       - name: ex05
         id: ex05
         uses: classroom-resources/autograding-command-grader@v1
+        if: steps.check.outputs.should-run == 'true'
         with:
           test-name: ex05
           setup-command: ''
@@ -68,6 +132,7 @@ jobs:
       - name: ex06
         id: ex06
         uses: classroom-resources/autograding-command-grader@v1
+        if: steps.check.outputs.should-run == 'true'
         with:
           test-name: ex06
           setup-command: ''
@@ -78,6 +143,7 @@ jobs:
       - name: ex07
         id: ex07
         uses: classroom-resources/autograding-command-grader@v1
+        if: steps.check.outputs.should-run == 'true'
         with:
           test-name: ex07
           setup-command: ''
@@ -88,6 +154,7 @@ jobs:
       - name: ex08
         id: ex08
         uses: classroom-resources/autograding-command-grader@v1
+        if: steps.check.outputs.should-run == 'true'
         with:
           test-name: ex08
           setup-command: ''
@@ -96,6 +163,7 @@ jobs:
           max-score: 2
 
       - name: Autograding Reporter
+        if: steps.check.outputs.should-run == 'true'
         uses: classroom-resources/autograding-grading-reporter@v1
         env:
           EX01_RESULTS: "${{steps.ex01.outputs.result}}"

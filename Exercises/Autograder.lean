@@ -19,3 +19,7 @@ elab_rules : command
     let report := if restricted.isEmpty then "solved"
                   else s!"unsolved (prohibited axioms: {restricted})"
     println! s!"{id}: {report}"
+
+def exercise [DecidableEq α] (ex : String) (actual expected : α) : String :=
+  let result := if expected = actual then "solved" else "unsolved"
+  s!"ex{ex}: {result}"
